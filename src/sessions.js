@@ -1,10 +1,11 @@
 const { Client, LocalAuth } = require('whatsapp-web.js')
 const fs = require('fs')
 const path = require('path')
+const sanitize = require('sanitize-filename');
 const sessions = new Map()
 const { baseWebhookURL, sessionFolderPath, maxAttachmentSize, setMessagesAsSeen, webVersion, webVersionCacheType, recoverSessions } = require('./config')
 const { triggerWebhook, waitForNestedObject, checkIfEventisEnabled } = require('./utils')
-const EmitToClient = require('./EmitToClient')  
+const EmitToClient = require('./EmitToClient')
 // Function to validate if the session is ready
 const validateSession = async (sessionId) => {
   try {
@@ -232,7 +233,7 @@ const initializeEvents = (client, sessionId) => {
   checkIfEventisEnabled('loading_screen')
     .then(_ => {
       client.on('loading_screen', (percent, message) => {
-        EmitToClient(sessionId, 'loading_screen', {percent, message})
+        EmitToClient(sessionId, 'loading_screen', { percent, message })
         triggerWebhook(sessionWebhook, sessionId, 'loading_screen', { percent, message })
       })
     })
@@ -240,7 +241,7 @@ const initializeEvents = (client, sessionId) => {
   checkIfEventisEnabled('media_uploaded')
     .then(_ => {
       client.on('media_uploaded', (message) => {
-        EmitToClient(sessionId, 'media_uploaded', {message})
+        EmitToClient(sessionId, 'media_uploaded', { message })
         triggerWebhook(sessionWebhook, sessionId, 'media_uploaded', { message })
       })
     })
@@ -248,18 +249,18 @@ const initializeEvents = (client, sessionId) => {
   checkIfEventisEnabled('message')
     .then(_ => {
       client.on('message', async (message) => {
-        EmitToClient(sessionId, 'message', {message})
+        EmitToClient(sessionId, 'message', { message })
         triggerWebhook(sessionWebhook, sessionId, 'message', { message })
         if (message.hasMedia && message._data?.size < maxAttachmentSize) {
-          // custom service event
-          checkIfEventisEnabled('media').then(_ => {
-            message.downloadMedia().then(messageMedia => {
-              EmitToClient(sessionId, 'media', {message})
-              triggerWebhook(sessionWebhook, sessionId, 'media', { messageMedia, message })
-            }).catch(e => {
-              console.log('Download media error:', e.message)
-            })
-          })
+          try {
+            message.downloadMedia().then(async (messageMedia) => {
+              EmitToClient(sessionId, 'media', { messageMedia, message });
+              triggerWebhook(sessionWebhook, sessionId, 'media', { messageMedia, message });
+            });
+          } catch (error) {
+            console.error('Error processing media:', error.message);
+            // Opsional: Kirim notifikasi atau log error
+          }
         }
         if (setMessagesAsSeen) {
           const chat = await message.getChat()
@@ -271,7 +272,7 @@ const initializeEvents = (client, sessionId) => {
   checkIfEventisEnabled('message_ack')
     .then(_ => {
       client.on('message_ack', async (message, ack) => {
-        EmitToClient(sessionId, 'media', {message,ack})
+        EmitToClient(sessionId, 'message_ack', { message, ack })
         triggerWebhook(sessionWebhook, sessionId, 'message_ack', { message, ack })
         if (setMessagesAsSeen) {
           const chat = await message.getChat()
@@ -283,7 +284,7 @@ const initializeEvents = (client, sessionId) => {
   checkIfEventisEnabled('message_create')
     .then(_ => {
       client.on('message_create', async (message) => {
-        EmitToClient(sessionId, 'message_create', {message})
+        EmitToClient(sessionId, 'message_create', { message })
         triggerWebhook(sessionWebhook, sessionId, 'message_create', { message })
         if (setMessagesAsSeen) {
           const chat = await message.getChat()
@@ -295,7 +296,7 @@ const initializeEvents = (client, sessionId) => {
   checkIfEventisEnabled('message_reaction')
     .then(_ => {
       client.on('message_reaction', (reaction) => {
-        EmitToClient(sessionId, 'message_reaction', {reaction})
+        EmitToClient(sessionId, 'message_reaction', { reaction })
         triggerWebhook(sessionWebhook, sessionId, 'message_reaction', { reaction })
       })
     })
@@ -303,7 +304,7 @@ const initializeEvents = (client, sessionId) => {
   checkIfEventisEnabled('message_edit')
     .then(_ => {
       client.on('message_edit', (message, newBody, prevBody) => {
-        EmitToClient(sessionId, 'message_reaction', {message, newBody, prevBody})
+        EmitToClient(sessionId, 'message_edit', { message, newBody, prevBody })
         triggerWebhook(sessionWebhook, sessionId, 'message_edit', { message, newBody, prevBody })
       })
     })
@@ -311,7 +312,7 @@ const initializeEvents = (client, sessionId) => {
   checkIfEventisEnabled('message_ciphertext')
     .then(_ => {
       client.on('message_ciphertext', (message) => {
-        EmitToClient(sessionId, 'message_ciphertext', {message})
+        EmitToClient(sessionId, 'message_ciphertext', { message })
         triggerWebhook(sessionWebhook, sessionId, 'message_ciphertext', { message })
       })
     })
@@ -321,7 +322,7 @@ const initializeEvents = (client, sessionId) => {
       // eslint-disable-next-line camelcase
       client.on('message_revoke_everyone', async (message) => {
         // eslint-disable-next-line camelcase
-        EmitToClient(sessionId, 'message_revoke_everyone', {message})
+        EmitToClient(sessionId, 'message_revoke_everyone', { message })
         triggerWebhook(sessionWebhook, sessionId, 'message_revoke_everyone', { message })
       })
     })
@@ -329,7 +330,7 @@ const initializeEvents = (client, sessionId) => {
   checkIfEventisEnabled('message_revoke_me')
     .then(_ => {
       client.on('message_revoke_me', async (message) => {
-        EmitToClient(sessionId, 'message_revoke_me', {message})
+        EmitToClient(sessionId, 'message_revoke_me', { message })
         triggerWebhook(sessionWebhook, sessionId, 'message_revoke_me', { message })
       })
     })
@@ -339,7 +340,7 @@ const initializeEvents = (client, sessionId) => {
     client.qr = qr
     checkIfEventisEnabled('qr')
       .then(_ => {
-        EmitToClient(sessionId, 'qr', {qr})
+        EmitToClient(sessionId, 'qr', { qr })
         triggerWebhook(sessionWebhook, sessionId, 'qr', { qr })
       })
   })
@@ -371,7 +372,7 @@ const initializeEvents = (client, sessionId) => {
   checkIfEventisEnabled('chat_archived')
     .then(_ => {
       client.on('chat_archived', async (chat, currState, prevState) => {
-        EmitToClient(sessionId, 'chat_archived', { chat,currState, prevState })
+        EmitToClient(sessionId, 'chat_archived', { chat, currState, prevState })
         triggerWebhook(sessionWebhook, sessionId, 'chat_archived', { chat, currState, prevState })
       })
     })
