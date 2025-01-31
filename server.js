@@ -39,9 +39,12 @@ io.on('connection', (socket) => {
     const client = sessions.get(sessionId)
     if (client) {
       const chats = await client.getChats()
+
       const updatedChats = await Promise.all(
         chats.map(async (chat) => {
           const profilePicUrl = await client.getProfilePicUrl(chat.id._serialized).catch(() => null);
+          //const listchat = await chat.fetchMessages({id:chat.id}); 
+          const listchat = await chat.getLabels(); 
           return {
             id: chat.id._serialized,
             new: chat.unreadCount,
@@ -49,6 +52,7 @@ io.on('connection', (socket) => {
             message: chat.lastMessage?.body || "No messages yet.",
             date: showDate(chat.lastMessage?.timestamp),
             img: profilePicUrl || "https://cdn-icons-png.flaticon.com/512/3177/3177440.png",
+            listchat
           };
         })
       );
